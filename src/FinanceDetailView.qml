@@ -425,12 +425,15 @@ Column {
                     font.letterSpacing: 1
                 }
                 Text {
+                    readonly property bool compactHighValue: modelData.label === "52W HIGH" && String(modelData.value).indexOf("(") !== -1
                     textFormat: Text.PlainText
                     text: modelData.value
                     color: controller.contentForeground
                     font.family: controller.contentFontFamily
                     font.pixelSize: Style.font.title
-                    wrapMode: Text.WordWrap
+                    fontSizeMode: compactHighValue ? Text.HorizontalFit : Text.FixedSize
+                    minimumPixelSize: Style.font.bodySmall
+                    wrapMode: compactHighValue ? Text.NoWrap : Text.WordWrap
                     width: parent.width
                 }
             }

@@ -13,6 +13,21 @@ test("missing numeric values stay missing", () => {
   assert.deepEqual(Model.buildDetailStats({}, { beta: null }, {}), [])
 })
 
+test("detail stats append current drawdown to the 52-week high value", () => {
+  const stats = Model.buildDetailStats({
+    price: 2.681,
+    fiftyTwoWeekHigh: 2.778,
+    fiftyTwoWeekLow: 2.13,
+    currency: "CNY",
+    priceHint: 4
+  }, {}, {})
+
+  assert.deepEqual(stats.slice(0, 2), [
+    { label: "52W HIGH", value: "2.7780 CNY (-3.49%)" },
+    { label: "52W LOW", value: "2.1300 CNY" }
+  ])
+})
+
 test("zero remains a valid numeric value", () => {
   assert.equal(Model.formatPrice(0, "USD", 2), "$0.00")
   assert.equal(Model.formatPercent(0), "0.00%")
@@ -141,6 +156,29 @@ test("chart parser calculates change when Yahoo omits the percentage", () => {
   const quote = Model.parseChart(raw)
   assert.equal(quote.price, 105)
   assert.equal(quote.changePercent, 5)
+})
+
+test("ETF quotes skip company fundamentals even when Yahoo labels them as equity", () => {
+  const raw = JSON.stringify({
+    chart: {
+      result: [{
+        meta: {
+          symbol: "513650.SS",
+          instrumentType: "EQUITY",
+          shortName: "CHINA SOUTHERN FUND MANAGEMENT",
+          longName: "China Southern Standard and Poor's 500 ETF (QDII)",
+          regularMarketPrice: 2.021
+        },
+        indicators: { quote: [{ close: [2.021] }] }
+      }]
+    }
+  })
+
+  const quote = Model.parseChart(raw)
+  assert.equal(quote.instrumentType, "EQUITY")
+  assert.match(quote.longName, /ETF/)
+  assert.equal(Model.supportsFundamentals(quote), false)
+  assert.equal(Model.supportsFundamentals({ instrumentType: "EQUITY", longName: "Apple Inc." }), true)
 })
 
 test("bar fields can be shown independently", () => {

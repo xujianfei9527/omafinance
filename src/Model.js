@@ -363,6 +363,8 @@ function quoteFromChart(result, fallbackSymbol) {
   return {
     symbol: symbol,
     name: String(meta.shortName || meta.longName || symbol),
+    longName: String(meta.longName || ""),
+    instrumentType: String(meta.instrumentType || ""),
     currency: String(meta.currency || "USD"),
     price: latest,
     previousClose: prev,
@@ -583,6 +585,14 @@ function quotePageUrl(symbol) {
     + encodeURIComponent(normalizeSymbol(symbol)) + "/"
 }
 
+function supportsFundamentals(quote) {
+  if (!quote) return true
+  var type = String(quote.instrumentType || "").toUpperCase()
+  if (type === "ETF" || type === "MUTUALFUND" || type === "FUND") return false
+  var label = String(quote.longName || quote.name || "").toUpperCase()
+  return !/(^|[^A-Z0-9])ETF([^A-Z0-9]|$)/.test(label)
+}
+
 function decodeYahooHtml(html) {
   var s = String(html || "")
   if (s.indexOf("\\\"") !== -1) s = s.split("\\\"").join("\"")
@@ -752,7 +762,14 @@ function buildDetailStats(quote, page, insights) {
     add("NEXT DIVIDEND", formatIsoDate(nextDiv.iso))
   add("DIV PAY DATE", page.dividendDate ? formatIsoDate(page.dividendDate) : "")
   add("NEXT EARNINGS", page.earningsDate ? ((page.earningsEstimated ? "Est. " : "") + formatIsoDate(page.earningsDate)) : "")
-  add("52W HIGH", quote.fiftyTwoWeekHigh ? formatPrice(quote.fiftyTwoWeekHigh, quote.currency, quote.priceHint) : "")
+  var fiftyTwoWeekHigh = finiteOrNull(quote.fiftyTwoWeekHigh)
+  var currentPrice = finiteOrNull(quote.price)
+  var fiftyTwoWeekHighLabel = fiftyTwoWeekHigh ? formatPrice(fiftyTwoWeekHigh, quote.currency, quote.priceHint) : ""
+  if (fiftyTwoWeekHigh && currentPrice !== null) {
+    var drawdown = Math.min(0, ((currentPrice - fiftyTwoWeekHigh) / fiftyTwoWeekHigh) * 100)
+    fiftyTwoWeekHighLabel += " (" + formatPercent(drawdown) + ")"
+  }
+  add("52W HIGH", fiftyTwoWeekHighLabel)
   add("52W LOW", quote.fiftyTwoWeekLow ? formatPrice(quote.fiftyTwoWeekLow, quote.currency, quote.priceHint) : "")
   add("AVG VOLUME", page.averageVolume ? formatCompact(page.averageVolume) : "")
   add("BETA", formatRatio(page.beta) !== "-" ? formatRatio(page.beta) : "")
@@ -815,6 +832,7 @@ if (typeof module !== "undefined") {
     isFavorite: isFavorite,
     insightsUrl: insightsUrl,
     quotePageUrl: quotePageUrl,
+    supportsFundamentals: supportsFundamentals,
     parseQuotePage: parseQuotePage,
     parseInsights: parseInsights,
     isInsightsResponse: isInsightsResponse,

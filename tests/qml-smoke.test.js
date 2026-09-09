@@ -132,6 +132,13 @@ test("detail header stacks small ticker, company name, then price", () => {
   assert.match(detail, /id:\s*companyName[\s\S]*?font\.pixelSize:\s*Style\.font\.display/)
 })
 
+test("52-week high value fits its drawdown on one line", () => {
+  const detail = fs.readFileSync(source("FinanceDetailView.qml"), "utf8")
+  assert.match(detail, /compactHighValue/)
+  assert.match(detail, /Text\.HorizontalFit/)
+  assert.match(detail, /compactHighValue \? Text\.NoWrap : Text\.WordWrap/)
+})
+
 test("extended-hours price sits beside the at-close block", () => {
   const detail = fs.readFileSync(source("FinanceDetailView.qml"), "utf8")
 
