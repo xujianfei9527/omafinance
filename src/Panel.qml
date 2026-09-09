@@ -128,20 +128,21 @@ Panel {
     }
     readonly property bool detailDataLoading: {
         var loadingInsights = insightsProc.running && insightsFetchSymbol === detailSymbol && !insightsLoaded;
-        var loadingPage = quotePageProc.running && quotePageFetchSymbol === detailSymbol && !quotePageLoaded;
+        var loadingPage = detailSupportsFundamentals && quotePageProc.running && quotePageFetchSymbol === detailSymbol && !quotePageLoaded;
         return loadingInsights || loadingPage;
     }
-    readonly property bool detailDataHasError: insightsError !== "" || quotePageError !== ""
+    readonly property bool detailDataHasError: insightsError !== "" || (detailSupportsFundamentals && quotePageError !== "")
     readonly property string detailDataStatusText: {
         var errors = [];
         if (insightsError)
             errors.push(insightsError);
-        if (quotePageError)
+        if (detailSupportsFundamentals && quotePageError)
             errors.push(quotePageError);
         return errors.join(" · ");
     }
     readonly property var detailRanges: Model.chartRanges()
     readonly property var activeQuote: quotes[detailSymbol] || detailQuote
+    readonly property bool detailSupportsFundamentals: Model.supportsFundamentals(activeQuote)
     readonly property var rangeChart: {
         if (detailQuote && detailQuote.chartRange === detailRange)
             return detailQuote;
@@ -273,7 +274,9 @@ Panel {
     }
 
     function setCenterHoverRevealSuppressed(value) {
-        if (root.bar && "centerHoverRevealSuppressed" in root.bar)
+        if (root.bar && typeof root.bar.setCenterHoverRevealSuppressed === "function")
+            root.bar.setCenterHoverRevealSuppressed(value);
+        else if (root.bar && "centerHoverRevealSuppressed" in root.bar)
             root.bar.centerHoverRevealSuppressed = value;
     }
 
@@ -636,6 +639,12 @@ Panel {
     function fetchQuotePage() {
         if (!detailSymbol)
             return;
+        if (!detailSupportsFundamentals) {
+            quotePageFailureCount = 0;
+            quotePageError = "";
+            quotePageLoaded = true;
+            return;
+        }
         if (quotePageLoaded)
             return;
         if (quotePageProc.running)
@@ -1071,6 +1080,10 @@ Panel {
                     root.quotePageFailureCount = 0;
                     root.quotePageError = "";
                     root.quotePageLoaded = true;
+                } else if (!root.detailSupportsFundamentals) {
+                    root.quotePageFailureCount = 0;
+                    root.quotePageError = "";
+                    root.quotePageLoaded = true;
                 } else {
                     root.quotePageFailureCount = Math.min(10, root.quotePageFailureCount + 1);
                     root.quotePageError = "Fundamentals unavailable";
@@ -1147,7 +1160,7 @@ Panel {
 
     Timer {
         interval: root.quotePageRetryMs
-        running: root.opened && root.view === "detail" && root.quotePageError !== ""
+        running: root.opened && root.view === "detail" && root.detailSupportsFundamentals && root.quotePageError !== ""
         repeat: false
         onTriggered: root.fetchQuotePage()
     }
