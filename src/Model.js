@@ -488,6 +488,15 @@ function formatPercent(pct) {
   return sign + n.toFixed(2) + "%"
 }
 
+function format52WeekDrawdown(quote) {
+  if (!quote) return ""
+  var price = finiteOrNull(quote.price)
+  var high = finiteOrNull(quote.fiftyTwoWeekHigh)
+  if (price === null || high === null || high <= 0) return ""
+  var drawdown = Math.min(0, ((price - high) / high) * 100)
+  return "(" + formatPercent(drawdown) + ")"
+}
+
 function formatChange(amount, currency, hint) {
   var n = Number(amount)
   if (!isFinite(n)) return "-"
@@ -551,8 +560,10 @@ function barLabel(pinned, quote, vertical, showTicker, showPrice, showChange, st
     : quote.changePercent !== null && quote.changePercent !== undefined)
   var price = hasPrice ? formatPrice(quote.price, quote.currency, quote.priceHint) : ""
   var change = hasChange ? formatQuoteChange(quote, style) : ""
+  var drawdown = showChange !== false ? format52WeekDrawdown(quote) : ""
   if (showPrice !== false && price && price !== "-") parts.push(price)
   if (showChange !== false && change && change !== "-") parts.push(change)
+  if (drawdown) parts.push(drawdown)
   return parts.length ? parts.join(vertical ? "\n" : "  ") : "$"
 }
 
@@ -820,6 +831,7 @@ if (typeof module !== "undefined") {
     shouldShowDelayedLoader: shouldShowDelayedLoader,
     formatPrice: formatPrice,
     formatPercent: formatPercent,
+    format52WeekDrawdown: format52WeekDrawdown,
     formatChange: formatChange,
     formatQuoteChange: formatQuoteChange,
     amountFromPercent: amountFromPercent,

@@ -175,6 +175,14 @@ test("watchlist virtualizes a capped set of reusable rows", () => {
   assert.match(list, /positionViewAtIndex\(currentIndex, ListView\.Contain\)/)
 })
 
+test("watchlist shows a dim 52-week drawdown after the change pill", () => {
+  const list = fs.readFileSync(source("FinanceListView.qml"), "utf8")
+
+  assert.match(list, /drawdownText:\s*Model\.format52WeekDrawdown\(quote\)/)
+  assert.match(list, /id:\s*changePill[\s\S]*?id:\s*drawdownLabel/)
+  assert.match(list, /id:\s*drawdownLabel[\s\S]*?color:\s*controller\.dim/)
+})
+
 test("sparklines cache normalized geometry for paint and hover", () => {
   const sparkline = fs.readFileSync(source("Sparkline.qml"), "utf8")
 

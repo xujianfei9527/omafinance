@@ -196,6 +196,7 @@ Column {
                 readonly property bool selected: controller.cursorActive && index === controller.selectedIndex
                 readonly property bool isPinned: Model.isPinned(controller.pinned, symbol)
                 readonly property color sparkColor: controller.toneColor(quote ? quote.changePercent : null)
+                readonly property string drawdownText: Model.format52WeekDrawdown(quote)
 
                 CursorSurface {
                     anchors.fill: parent
@@ -267,7 +268,7 @@ Column {
                         width: Style.space(72)
                         height: Style.space(28)
                         anchors.right: parent.right
-                        anchors.rightMargin: Style.space(8) + Style.space(108) + Style.space(10)
+                        anchors.rightMargin: Style.space(8) + Style.space(144) + Style.space(10)
                         anchors.verticalCenter: parent.verticalCenter
                         values: quote && quote.closes ? quote.closes : []
                         lineColor: sparkColor
@@ -279,7 +280,7 @@ Column {
 
                     Column {
                         id: priceCol
-                        width: Style.space(108)
+                        width: Style.space(144)
                         anchors.right: parent.right
                         anchors.rightMargin: Style.space(8)
                         anchors.verticalCenter: parent.verticalCenter
@@ -288,7 +289,7 @@ Column {
                         Text {
                             textFormat: Text.PlainText
                             width: parent.width
-                            horizontalAlignment: Text.AlignRight
+                            horizontalAlignment: Text.AlignHCenter
                             elide: Text.ElideRight
                             text: quote ? Model.formatPrice(quote.price, quote.currency, quote.priceHint) : "-"
                             color: controller.contentForeground
@@ -296,22 +297,43 @@ Column {
                             font.pixelSize: Style.font.body
                         }
 
-                        Rectangle {
+                        Row {
                             anchors.right: parent.right
-                            radius: Style.space(6)
-                            color: controller.pillFill(quote ? quote.changePercent : null)
-                            implicitWidth: changeLabel.implicitWidth + Style.space(12)
-                            implicitHeight: changeLabel.implicitHeight + Style.space(4)
+                            spacing: Style.space(5)
 
-                            Text {
-                                id: changeLabel
-                                anchors.centerIn: parent
-                                textFormat: Text.PlainText
-                                text: quote ? Model.formatQuoteChange(quote, controller.changeStyle) : "-"
-                                color: controller.contentForeground
-                                font.family: controller.contentFontFamily
-                                font.pixelSize: Style.font.bodySmall
-                                font.bold: true
+                            Rectangle {
+                                id: changePill
+                                radius: Style.space(6)
+                                color: controller.pillFill(quote ? quote.changePercent : null)
+                                implicitWidth: changeLabel.implicitWidth + Style.space(12)
+                                implicitHeight: changeLabel.implicitHeight + Style.space(4)
+
+                                Text {
+                                    id: changeLabel
+                                    anchors.centerIn: parent
+                                    textFormat: Text.PlainText
+                                    text: quote ? Model.formatQuoteChange(quote, controller.changeStyle) : "-"
+                                    color: controller.contentForeground
+                                    font.family: controller.contentFontFamily
+                                    font.pixelSize: Style.font.bodySmall
+                                    font.bold: true
+                                }
+                            }
+
+                            Item {
+                                visible: drawdownText !== ""
+                                width: visible ? drawdownLabel.implicitWidth : 0
+                                height: changePill.implicitHeight
+
+                                Text {
+                                    id: drawdownLabel
+                                    anchors.centerIn: parent
+                                    textFormat: Text.PlainText
+                                    text: drawdownText
+                                    color: controller.dim
+                                    font.family: controller.contentFontFamily
+                                    font.pixelSize: Style.font.bodySmall
+                                }
                             }
                         }
                     }
