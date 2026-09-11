@@ -28,6 +28,13 @@ test("detail stats append current drawdown to the 52-week high value", () => {
   ])
 })
 
+test("watchlist formats current drawdown from the 52-week high", () => {
+  assert.equal(Model.format52WeekDrawdown({ price: 2.681, fiftyTwoWeekHigh: 2.778 }), "(-3.49%)")
+  assert.equal(Model.format52WeekDrawdown({ price: 105, fiftyTwoWeekHigh: 100 }), "(0.00%)")
+  assert.equal(Model.format52WeekDrawdown({ price: 100, fiftyTwoWeekHigh: null }), "")
+  assert.equal(Model.format52WeekDrawdown(null), "")
+})
+
 test("zero remains a valid numeric value", () => {
   assert.equal(Model.formatPrice(0, "USD", 2), "$0.00")
   assert.equal(Model.formatPercent(0), "0.00%")
@@ -195,6 +202,22 @@ test("bar fields can be shown independently", () => {
   assert.equal(Model.barLabelTone(quote, false, false, false), "flat")
   assert.equal(Model.barLabelTone(null, true, true, true), "flat")
   assert.equal(Model.barLabelTone({ change: -2.94, changePercent: null }, true, false, false, "dollars"), "down")
+})
+
+test("bar appends 52-week drawdown using the existing label tone", () => {
+  const quote = {
+    price: 90,
+    fiftyTwoWeekHigh: 100,
+    currency: "USD",
+    priceHint: 2,
+    change: -1,
+    changePercent: -1.1
+  }
+
+  assert.equal(Model.barLabel("TEST", quote, false, true, true, true), "TEST  $90.00  -1.10%  (-10.00%)")
+  assert.equal(Model.barLabel("TEST", quote, true, true, true, true), "TEST\n$90.00\n-1.10%\n(-10.00%)")
+  assert.equal(Model.barLabel("TEST", quote, false, true, true, false), "TEST  $90.00")
+  assert.equal(Model.barLabelTone(quote, true, true, true), "down")
 })
 
 test("detail quote refresh targets only the active symbol", () => {
