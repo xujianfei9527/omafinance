@@ -28,9 +28,21 @@ Panel {
     property var detailQuote: null
     property string chartFetchSymbol: ""
     property string chartFetchRange: ""
+    property bool chartAlternate: false
     property string insightsFetchSymbol: ""
     property string quotePageFetchSymbol: ""
     property bool quoteRefreshPending: false
+    property bool quoteCycleActive: false
+    property var quoteFetchSymbols: []
+    property var quoteCycleResults: ({})
+    property var quoteBatchSymbols: []
+    property bool quoteBatchAlternate: false
+    property var quoteFallbackSymbols: []
+    property int quoteFallbackIndex: 0
+    property bool quoteFallbackAlternate: false
+    property string quoteRequestMode: ""
+    property string quoteRequestSymbol: ""
+    property bool quoteCacheWritePending: false
     property int quoteFailureCount: 0
     property string quoteError: ""
     property double quotesUpdatedAt: 0
@@ -54,12 +66,14 @@ Panel {
     property int suggestionIndex: 0
     property string searchPendingQuery: ""
     property string searchActiveQuery: ""
+    property bool searchAlternate: false
     property string searchError: ""
     property bool searching: false
     property var searchCache: ({})
     property var searchCacheOrder: []
     readonly property int searchCacheTtlMs: 300000
     readonly property int searchCacheLimit: 32
+    readonly property int quoteCacheMaxAgeMs: 604800000
     property string listChrome: "rows"
     property int settingsCursor: 0
     property int detailSection: 0
@@ -91,7 +105,7 @@ Panel {
     readonly property int barSectionSettingsIndex: showChange ? 6 : 5
     readonly property int settingsLastIndex: barSectionSettingsIndex
     readonly property int backgroundRefreshMs: Model.backoffDelay(refreshSeconds * 1000, quoteFailureCount, 3600000)
-    readonly property int liveRefreshMs: Model.backoffDelay(2000, quoteFailureCount, 60000)
+    readonly property int liveRefreshMs: Model.backoffDelay(10000, quoteFailureCount, 120000)
     readonly property int chartRefreshMs: Model.backoffDelay(15000, chartFailureCount, 120000)
     readonly property int insightsRetryMs: Model.backoffDelay(5000, insightsFailureCount, 120000)
     readonly property int quotePageRetryMs: Model.backoffDelay(5000, quotePageFailureCount, 120000)
@@ -110,7 +124,7 @@ Panel {
     readonly property string labelTone: Model.barLabelTone(pinnedQuote, showTicker, showPrice, showChange, changeStyle)
     readonly property string quoteStatusText: {
         var hasQuotes = Object.keys(quotes || {}).length > 0;
-        if (quoteProc.running)
+        if (quoteCycleActive)
             return hasQuotes ? "" : "Loading quotes…";
         if (quoteError) {
             var suffix = showLastUpdated && quotesUpdatedAt > 0 ? " · Last updated " + timeLabel(quotesUpdatedAt) : "";
@@ -324,6 +338,42 @@ Panel {
         stateFile.setText(Model.serializeState(watchlist, pinned, detailRange));
     }
 
+    function applyQuoteCache(raw) {
+        if (Object.keys(quotes || {}).length > 0)
+            return;
+        var cached = Model.parseQuoteCache(raw, quoteCacheMaxAgeMs, Date.now());
+        if (Object.keys(cached.quotes).length === 0)
+            return;
+        quotes = cached.quotes;
+        quotesUpdatedAt = cached.updatedAt;
+    }
+
+    function persistQuoteCache() {
+        if (Object.keys(quotes || {}).length === 0)
+            return;
+        if (mkdirProc.running) {
+            quoteCacheWritePending = true;
+            return;
+        }
+        quoteCacheWritePending = false;
+        quoteCacheFile.setText(Model.serializeQuoteCache(quotes, quotesUpdatedAt));
+    }
+
+    function yahooCurlCommand(url, maxTime) {
+        var timeout = String(Math.max(8, Number(maxTime) || 12));
+        return [
+            "curl", "-fsS", "--compressed",
+            "--connect-timeout", "4",
+            "--max-time", timeout,
+            "--retry", "2",
+            "--retry-all-errors",
+            "--retry-delay", "1",
+            "--retry-max-time", "24",
+            "-A", "Mozilla/5.0",
+            url
+        ];
+    }
+
     function persistSettings(values) {
         var entry = {
             id: root.moduleName
@@ -422,13 +472,72 @@ Panel {
             quoteRefreshPending = false;
             return;
         }
-        if (quoteProc.running) {
+        if (quoteCycleActive) {
             quoteRefreshPending = true;
             return;
         }
         quoteRefreshPending = false;
-        quoteProc.command = ["curl", "-fsS", "--max-time", "8", "-A", "Mozilla/5.0", Model.sparkUrl(quoteSymbols)];
+        quoteCycleActive = true;
+        quoteFetchSymbols = quoteSymbols.slice();
+        quoteCycleResults = ({});
+        quoteBatchSymbols = quoteFetchSymbols.slice();
+        quoteBatchAlternate = false;
+        quoteFallbackSymbols = [];
+        quoteFallbackIndex = 0;
+        quoteFallbackAlternate = false;
+        runQuoteBatch();
+    }
+
+    function runQuoteBatch() {
+        if (!quoteCycleActive || quoteBatchSymbols.length === 0) {
+            finishQuoteCycle();
+            return;
+        }
+        quoteRequestMode = "batch";
+        quoteRequestSymbol = "";
+        quoteProc.command = yahooCurlCommand(Model.sparkUrl(quoteBatchSymbols, quoteBatchAlternate), 12);
         quoteProc.running = true;
+    }
+
+    function runQuoteFallback() {
+        if (!quoteCycleActive)
+            return;
+        if (quoteFallbackIndex >= quoteFallbackSymbols.length) {
+            finishQuoteCycle();
+            return;
+        }
+        quoteRequestMode = "single";
+        quoteRequestSymbol = quoteFallbackSymbols[quoteFallbackIndex];
+        quoteProc.command = yahooCurlCommand(Model.chartUrl(quoteRequestSymbol, "1D", quoteFallbackAlternate), 12);
+        quoteProc.running = true;
+    }
+
+    function finishQuoteCycle() {
+        if (!quoteCycleActive)
+            return;
+        var received = Object.keys(quoteCycleResults).length;
+        var missing = Model.missingQuoteSymbols(quoteFetchSymbols, quoteCycleResults);
+        if (received > 0) {
+            quotes = Model.mergeQuotes(quotes, quoteCycleResults);
+            quotesUpdatedAt = Date.now();
+            persistQuoteCache();
+        }
+        if (missing.length === 0) {
+            quoteFailureCount = 0;
+            quoteError = "";
+        } else {
+            quoteFailureCount = Math.min(10, quoteFailureCount + 1);
+            quoteError = received > 0 || Object.keys(quotes || {}).length > 0
+                ? "Some quotes unavailable"
+                : "Quotes unavailable";
+        }
+        quoteRequestMode = "";
+        quoteRequestSymbol = "";
+        quoteCycleActive = false;
+        if (quoteRefreshPending) {
+            quoteRefreshPending = false;
+            Qt.callLater(root.refresh);
+        }
     }
 
     function scheduleOpenRefresh() {
@@ -437,7 +546,7 @@ Panel {
 
     function scheduleBarRefresh() {
         Qt.callLater(function () {
-            if (root.showBarQuote && !quoteProc.running)
+            if (root.showBarQuote && !root.quoteCycleActive)
                 root.refresh();
         });
     }
@@ -611,8 +720,13 @@ Panel {
             return;
         chartFetchSymbol = detailSymbol;
         chartFetchRange = detailRange;
+        chartAlternate = false;
         chartError = "";
-        chartProc.command = ["curl", "-fsS", "--max-time", "8", "-A", "Mozilla/5.0", Model.chartUrl(chartFetchSymbol, chartFetchRange)];
+        runChartFetch();
+    }
+
+    function runChartFetch() {
+        chartProc.command = yahooCurlCommand(Model.chartUrl(chartFetchSymbol, chartFetchRange, chartAlternate), 12);
         chartProc.running = true;
     }
 
@@ -632,7 +746,7 @@ Panel {
             return;
         insightsFetchSymbol = detailSymbol;
         insightsError = "";
-        insightsProc.command = ["curl", "-fsS", "--max-time", "8", "-A", "Mozilla/5.0", Model.insightsUrl(insightsFetchSymbol)];
+        insightsProc.command = yahooCurlCommand(Model.insightsUrl(insightsFetchSymbol), 12);
         insightsProc.running = true;
     }
 
@@ -651,7 +765,7 @@ Panel {
             return;
         quotePageFetchSymbol = detailSymbol;
         quotePageError = "";
-        quotePageProc.command = ["curl", "-fsS", "--compressed", "--max-time", "12", "-A", "Mozilla/5.0", Model.quotePageUrl(quotePageFetchSymbol)];
+        quotePageProc.command = yahooCurlCommand(Model.quotePageUrl(quotePageFetchSymbol), 15);
         quotePageProc.running = true;
     }
 
@@ -773,7 +887,12 @@ Panel {
         if (!searching || !searchPendingQuery)
             return;
         searchActiveQuery = searchPendingQuery;
-        searchProc.command = ["curl", "-fsS", "--max-time", "5", "-A", "Mozilla/5.0", Model.searchUrl(searchActiveQuery)];
+        searchAlternate = false;
+        runSearchFetch();
+    }
+
+    function runSearchFetch() {
+        searchProc.command = yahooCurlCommand(Model.searchUrl(searchActiveQuery, searchAlternate), 10);
         searchProc.running = true;
     }
 
@@ -945,16 +1064,31 @@ Panel {
         onFileChanged: reload()
     }
 
+    FileView {
+        id: quoteCacheFile
+        path: Quickshell.env("HOME") + "/.cache/omafinance/quotes.json"
+        watchChanges: false
+        atomicWrites: true
+        printErrors: false
+        onLoaded: root.applyQuoteCache(text())
+    }
+
     property bool seedOnReady: false
 
     Process {
         id: mkdirProc
-        command: ["mkdir", "-p", Quickshell.env("HOME") + "/.local/state/omarchy/settings"]
+        command: [
+            "mkdir", "-p",
+            Quickshell.env("HOME") + "/.local/state/omarchy/settings",
+            Quickshell.env("HOME") + "/.cache/omafinance"
+        ]
         onExited: {
             if (root.seedOnReady) {
                 root.seedOnReady = false;
                 root.persist();
             }
+            if (root.quoteCacheWritePending)
+                root.persistQuoteCache();
         }
     }
 
@@ -968,18 +1102,43 @@ Panel {
         id: quoteProc
         onExited: function (exitCode) {
             var raw = String(quoteStdout.text || "").trim();
-            var parsed = exitCode === 0 && raw ? Model.parseSpark(raw) : ({});
-            if (Object.keys(parsed).length > 0) {
-                root.quotes = Model.mergeQuotes(root.quotes, parsed);
-                root.quoteFailureCount = 0;
-                root.quoteError = "";
-                root.quotesUpdatedAt = Date.now();
-            } else {
-                root.quoteFailureCount = Math.min(10, root.quoteFailureCount + 1);
-                root.quoteError = "Quotes unavailable";
+            if (root.quoteRequestMode === "batch") {
+                var parsed = exitCode === 0 && raw ? Model.parseSpark(raw) : ({});
+                root.quoteCycleResults = Model.mergeQuotes(root.quoteCycleResults, parsed);
+                var missing = Model.missingQuoteSymbols(root.quoteFetchSymbols, root.quoteCycleResults);
+                if (!root.quoteBatchAlternate && missing.length > 0) {
+                    root.quoteBatchSymbols = missing;
+                    root.quoteBatchAlternate = true;
+                    Qt.callLater(root.runQuoteBatch);
+                    return;
+                }
+                root.quoteFallbackSymbols = missing;
+                root.quoteFallbackIndex = 0;
+                root.quoteFallbackAlternate = false;
+                Qt.callLater(missing.length > 0 ? root.runQuoteFallback : root.finishQuoteCycle);
+                return;
             }
-            if (root.quoteRefreshPending)
-                Qt.callLater(root.refresh);
+
+            if (root.quoteRequestMode === "single") {
+                var quote = exitCode === 0 && raw ? Model.parseChart(raw) : null;
+                var valid = quote && quote.symbol === root.quoteRequestSymbol && quote.price != null;
+                if (valid) {
+                    var incoming = {};
+                    incoming[quote.symbol] = quote;
+                    root.quoteCycleResults = Model.mergeQuotes(root.quoteCycleResults, incoming);
+                }
+                if (!valid && !root.quoteFallbackAlternate) {
+                    root.quoteFallbackAlternate = true;
+                    Qt.callLater(root.runQuoteFallback);
+                    return;
+                }
+                root.quoteFallbackIndex += 1;
+                root.quoteFallbackAlternate = false;
+                Qt.callLater(root.runQuoteFallback);
+                return;
+            }
+
+            Qt.callLater(root.finishQuoteCycle);
         }
         stdout: StdioCollector {
             id: quoteStdout
@@ -990,6 +1149,11 @@ Panel {
     Process {
         id: searchProc
         onExited: function (exitCode) {
+            if (exitCode !== 0 && !root.searchAlternate) {
+                root.searchAlternate = true;
+                Qt.callLater(root.runSearchFetch);
+                return;
+            }
             var results = [];
             if (exitCode === 0) {
                 results = Model.parseSearch(searchStdout.text);
@@ -1028,6 +1192,10 @@ Panel {
                     root.chartFailureCount = 0;
                     root.chartError = "";
                     root.chartUpdatedAt = Date.now();
+                } else if (!root.chartAlternate) {
+                    root.chartAlternate = true;
+                    Qt.callLater(root.runChartFetch);
+                    return;
                 } else {
                     root.chartFailureCount = Math.min(10, root.chartFailureCount + 1);
                     root.chartError = "Chart unavailable";
@@ -1120,7 +1288,7 @@ Panel {
         repeat: false
         onTriggered: {
             var searchStarted = root.searching && root.searchQuery.length > 0;
-            if (root.opened && !searchStarted && !quoteProc.running)
+            if (root.opened && !searchStarted && !root.quoteCycleActive)
                 root.refresh();
         }
     }
@@ -1130,7 +1298,7 @@ Panel {
         interval: root.backgroundRefreshMs
         running: root.showBarQuote && !root.opened
         repeat: true
-        onTriggered: if (!quoteProc.running)
+        onTriggered: if (!root.quoteCycleActive)
             root.refresh()
     }
 
@@ -1139,7 +1307,7 @@ Panel {
         interval: root.liveRefreshMs
         running: root.opened
         repeat: true
-        onTriggered: if (!quoteProc.running)
+        onTriggered: if (!root.quoteCycleActive)
             root.refresh()
     }
 

@@ -29,7 +29,7 @@ test("panel composes the extracted views", () => {
   const panel = fs.readFileSync(source("Panel.qml"), "utf8")
   for (const component of ["FinanceListView", "FinanceSettingsView", "FinanceDetailView"])
     assert.match(panel, new RegExp(`\\b${component}\\s*\\{`))
-  assert.match(panel, /backoffDelay\(2000, quoteFailureCount, 60000\)/)
+  assert.match(panel, /backoffDelay\(10000, quoteFailureCount, 120000\)/)
 })
 
 test("panel presents before scheduling one non-blocking open refresh", () => {
@@ -39,7 +39,7 @@ test("panel presents before scheduling one non-blocking open refresh", () => {
   assert.match(panel, /function open\(\)[\s\S]*?root\.controller\.show\(\);\s*scheduleOpenRefresh\(\);/)
   assert.match(panel, /function toggle\(\)[\s\S]*?else\s*root\.open\(\);/)
   assert.match(panel, /function scheduleOpenRefresh\(\)\s*\{\s*openRefreshTimer\.restart\(\);?\s*\}/)
-  assert.match(panel, /function scheduleBarRefresh\(\)[\s\S]*?root\.showBarQuote && !quoteProc\.running/)
+  assert.match(panel, /function scheduleBarRefresh\(\)[\s\S]*?root\.showBarQuote && !root\.quoteCycleActive/)
   assert.doesNotMatch(panel, /triggeredOnStart:\s*true/)
 })
 
@@ -71,7 +71,7 @@ test("background quote refreshes do not show updating status", () => {
 
   assert.doesNotMatch(panel, /Updating quotes/)
   assert.doesNotMatch(panel, /Updating chart/)
-  assert.match(panel, /quoteProc\.running\)\s*return hasQuotes \? "" : "Loading quotes…";/)
+  assert.match(panel, /quoteCycleActive\)\s*return hasQuotes \? "" : "Loading quotes…";/)
   assert.match(panel, /chartProc\.running && currentFetch\)\s*return rangeChart \? "" : "Loading chart…";/)
   assert.match(panel, /return showLastUpdated && chartUpdatedAt > 0 && detailQuote \? "Last updated "/)
 })
@@ -80,7 +80,21 @@ test("quote refresh uses symbols selected for the active view", () => {
   const panel = fs.readFileSync(source("Panel.qml"), "utf8")
 
   assert.match(panel, /quoteSymbolsForView\(watchlist, detailSymbol, view\)/)
-  assert.match(panel, /Model\.sparkUrl\(quoteSymbols\)/)
+  assert.match(panel, /Model\.sparkUrl\(quoteBatchSymbols, quoteBatchAlternate\)/)
+  assert.match(panel, /Model\.chartUrl\(quoteRequestSymbol, "1D", quoteFallbackAlternate\)/)
+})
+
+test("Yahoo quote refresh retries, falls back per symbol, and persists a last-known cache", () => {
+  const panel = fs.readFileSync(source("Panel.qml"), "utf8")
+
+  assert.match(panel, /"--retry", "2"/)
+  assert.match(panel, /"--retry-all-errors"/)
+  assert.match(panel, /quoteBatchAlternate = true/)
+  assert.match(panel, /quoteFallbackAlternate = true/)
+  assert.match(panel, /missingQuoteSymbols\(root\.quoteFetchSymbols, root\.quoteCycleResults\)/)
+  assert.match(panel, /\.cache\/omafinance\/quotes\.json/)
+  assert.match(panel, /serializeQuoteCache\(quotes, quotesUpdatedAt\)/)
+  assert.match(panel, /parseQuoteCache\(raw, quoteCacheMaxAgeMs, Date\.now\(\)\)/)
 })
 
 test("detail loading is a delayed icon beside the ticker", () => {
