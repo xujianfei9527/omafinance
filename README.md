@@ -16,6 +16,8 @@
 - **Pin rotation** - pin several tickers; the bar cycles them every 5 seconds
 - **Detail chart** - `1D` `1W` `1M` `YTD` `1Y` `5Y` `All`, with range % and hover price
 - **Fundamentals** - market cap, P/E, dividends, next earnings, 52-week range, target, rating
+- **Resilient quotes** - retries Yahoo failures, switches API hosts, and repairs missing batch entries one ticker at a time
+- **Last-known cache** - keeps the bar populated during temporary network or Yahoo outages
 - **Remembered prefs** - watchlist, pins, and last chart range
 
 No API key. Quotes come from Yahoo Finance.
@@ -26,7 +28,7 @@ No API key. Quotes come from Yahoo Finance.
 omarchy plugin add https://github.com/mohamedmansour/omafinance.git --enable
 ```
 
-Omafinance lands on the right of the bar (next to network / audio). A gear in the panel opens settings: independently show or hide the ticker symbol, price, percentage change, and last-updated time, and configure background refresh. The last-updated time is hidden by default. While the panel is open, quotes refresh every two seconds and the active 1D chart every fifteen seconds. Failed requests back off automatically.
+Omafinance lands on the right of the bar (next to network / audio). A gear in the panel opens settings: independently show or hide the ticker symbol, price, percentage change, and last-updated time, and configure background refresh. The last-updated time is hidden by default. While the panel is open, quotes refresh every ten seconds and the active 1D chart every fifteen seconds. Failed requests retry, switch Yahoo API hosts, and then back off automatically.
 
 ## Update
 
@@ -81,6 +83,12 @@ Watchlist, pinned tickers, and chart range:
 
 ```
 ~/.local/state/omarchy/settings/finance.json
+```
+
+The last successful quotes are cached for up to seven days so a temporary outage does not blank the bar:
+
+```
+~/.cache/omafinance/quotes.json
 ```
 
 Quotes are fetched with `curl` from Yahoo Finance. Nothing is sent to this project’s servers.

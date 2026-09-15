@@ -65,6 +65,39 @@ test("retry delay backs off exponentially and respects its ceiling", () => {
   assert.equal(Model.backoffDelay(5000, 20, 60000), 60000)
 })
 
+test("Yahoo URLs can switch between API hosts", () => {
+  assert.match(Model.sparkUrl(["AAPL"], false), /^https:\/\/query1\.finance\.yahoo\.com\//)
+  assert.match(Model.sparkUrl(["AAPL"], true), /^https:\/\/query2\.finance\.yahoo\.com\//)
+  assert.match(Model.chartUrl("AAPL", "1D", false), /^https:\/\/query1\.finance\.yahoo\.com\//)
+  assert.match(Model.chartUrl("AAPL", "1D", true), /^https:\/\/query2\.finance\.yahoo\.com\//)
+  assert.match(Model.searchUrl("Apple", false), /^https:\/\/query1\.finance\.yahoo\.com\//)
+  assert.match(Model.searchUrl("Apple", true), /^https:\/\/query2\.finance\.yahoo\.com\//)
+})
+
+test("quote fallback targets only missing or unusable symbols", () => {
+  assert.deepEqual(Model.missingQuoteSymbols(["AAPL", "MSFT", "AAPL"], {
+    AAPL: { symbol: "AAPL", price: 100 },
+    MSFT: { symbol: "MSFT", price: null }
+  }), ["MSFT"])
+})
+
+test("quote cache restores valid recent prices and rejects expired data", () => {
+  const now = 2_000_000
+  const raw = Model.serializeQuoteCache({
+    AAPL: { symbol: "AAPL", price: 100, closes: [99, 100] },
+    EMPTY: { symbol: "EMPTY", price: null }
+  }, now - 1000)
+
+  assert.deepEqual(Model.parseQuoteCache(raw, 5000, now), {
+    updatedAt: now - 1000,
+    quotes: {
+      AAPL: { symbol: "AAPL", price: 100, closes: [99, 100] }
+    }
+  })
+  assert.deepEqual(Model.parseQuoteCache(raw, 500, now), { quotes: {}, updatedAt: 0 })
+  assert.deepEqual(Model.parseQuoteCache("not json", 5000, now), { quotes: {}, updatedAt: 0 })
+})
+
 test("insights response validation rejects transport payloads and API errors", () => {
   assert.equal(Model.isInsightsResponse(""), false)
   assert.equal(Model.isInsightsResponse("not json"), false)

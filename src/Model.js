@@ -123,15 +123,19 @@ function barSymbol(pinned, watchlist, index) {
   return list.length ? list[0] : ""
 }
 
-function searchUrl(query) {
-  return "https://query2.finance.yahoo.com/v1/finance/search?q="
+function yahooApiBase(alternate) {
+  return alternate ? "https://query2.finance.yahoo.com" : "https://query1.finance.yahoo.com"
+}
+
+function searchUrl(query, alternate) {
+  return yahooApiBase(!!alternate) + "/v1/finance/search?q="
     + encodeURIComponent(String(query || ""))
     + "&quotesCount=8&newsCount=0"
 }
 
-function sparkUrl(symbols) {
+function sparkUrl(symbols, alternate) {
   var list = Array.isArray(symbols) ? symbols.slice() : []
-  return "https://query1.finance.yahoo.com/v7/finance/spark?symbols="
+  return yahooApiBase(!!alternate) + "/v7/finance/spark?symbols="
     + encodeURIComponent(list.join(","))
     + "&range=1d&interval=5m&includePrePost=true"
 }
@@ -210,10 +214,10 @@ function rangeChangePercent(quote, rangeKey) {
   return ((last - first) / first) * 100
 }
 
-function chartUrl(symbol, rangeKey) {
+function chartUrl(symbol, rangeKey, alternate) {
   var spec = chartSpec(rangeKey)
   var prepost = String(rangeKey || "1D") === "1D" ? "true" : "false"
-  return "https://query1.finance.yahoo.com/v8/finance/chart/"
+  return yahooApiBase(!!alternate) + "/v8/finance/chart/"
     + encodeURIComponent(normalizeSymbol(symbol))
     + "?range=" + spec.range
     + "&interval=" + spec.interval
@@ -429,6 +433,64 @@ function mergeQuotes(current, incoming) {
     }
   }
   return out
+}
+
+function missingQuoteSymbols(symbols, quotes) {
+  var list = Array.isArray(symbols) ? symbols : []
+  var source = quotes || {}
+  var out = []
+  var seen = {}
+  for (var i = 0; i < list.length; i++) {
+    var symbol = normalizeSymbol(list[i])
+    if (!symbol || seen[symbol]) continue
+    seen[symbol] = true
+    var quote = source[symbol]
+    if (!quote || finiteOrNull(quote.price) === null) out.push(symbol)
+  }
+  return out
+}
+
+function serializeQuoteCache(quotes, updatedAt) {
+  var source = quotes || {}
+  var safe = {}
+  for (var key in source) {
+    if (!Object.prototype.hasOwnProperty.call(source, key)) continue
+    var quote = source[key]
+    var symbol = normalizeSymbol(quote && quote.symbol ? quote.symbol : key)
+    if (!symbol || !quote || finiteOrNull(quote.price) === null) continue
+    safe[symbol] = quote
+  }
+  return JSON.stringify({
+    version: 1,
+    updatedAt: Math.max(0, Number(updatedAt) || 0),
+    quotes: safe
+  }, null, 2) + "\n"
+}
+
+function parseQuoteCache(raw, maxAgeMs, now) {
+  var empty = { quotes: {}, updatedAt: 0 }
+  try {
+    var data = JSON.parse(String(raw || ""))
+    if (!data || typeof data !== "object" || !data.quotes) return empty
+    var updatedAt = Number(data.updatedAt)
+    var current = Number(now)
+    var maxAge = Number(maxAgeMs)
+    if (!isFinite(updatedAt) || updatedAt <= 0) return empty
+    if (isFinite(current) && isFinite(maxAge) && maxAge > 0 && current - updatedAt > maxAge) return empty
+
+    var quotes = {}
+    for (var key in data.quotes) {
+      if (!Object.prototype.hasOwnProperty.call(data.quotes, key)) continue
+      var quote = data.quotes[key]
+      var symbol = normalizeSymbol(quote && quote.symbol ? quote.symbol : key)
+      if (!symbol || !quote || finiteOrNull(quote.price) === null) continue
+      quote.symbol = symbol
+      quotes[symbol] = quote
+    }
+    return { quotes: quotes, updatedAt: updatedAt }
+  } catch (e) {
+    return empty
+  }
 }
 
 function backoffDelay(baseMs, failures, maxMs) {
@@ -811,6 +873,7 @@ if (typeof module !== "undefined") {
     isPinned: isPinned,
     togglePinned: togglePinned,
     barSymbol: barSymbol,
+    yahooApiBase: yahooApiBase,
     searchUrl: searchUrl,
     sparkUrl: sparkUrl,
     quoteSymbolsForView: quoteSymbolsForView,
@@ -826,6 +889,9 @@ if (typeof module !== "undefined") {
     parseSpark: parseSpark,
     parseChart: parseChart,
     mergeQuotes: mergeQuotes,
+    missingQuoteSymbols: missingQuoteSymbols,
+    serializeQuoteCache: serializeQuoteCache,
+    parseQuoteCache: parseQuoteCache,
     backoffDelay: backoffDelay,
     delayedLoaderDelayMs: delayedLoaderDelayMs,
     shouldShowDelayedLoader: shouldShowDelayedLoader,
