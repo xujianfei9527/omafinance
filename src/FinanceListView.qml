@@ -10,6 +10,12 @@ Column {
     width: parent.width
     spacing: Style.space(10)
     visible: controller.view === "list"
+    readonly property real visibleColumnGap: Style.space(30)
+    readonly property real sparkEdgeCompensation: Style.space(1)
+    readonly property real rowColumnGap: visibleColumnGap - sparkEdgeCompensation
+    readonly property real textTrailingCompensation: Style.space(7)
+    readonly property real nameColumnWidth: Style.space(204)
+    readonly property real priceColumnWidth: Style.space(110)
 
     Item {
         width: parent.width
@@ -227,10 +233,9 @@ Column {
                     Column {
                         id: nameCol
                         anchors.left: parent.left
-                        anchors.right: spark.left
                         anchors.leftMargin: Style.space(8)
-                        anchors.rightMargin: Style.space(8)
                         anchors.verticalCenter: parent.verticalCenter
+                        width: listViewRoot.nameColumnWidth
                         spacing: 1
 
                         Row {
@@ -265,10 +270,11 @@ Column {
 
                     Sparkline {
                         id: spark
-                        width: Style.space(72)
                         height: Style.space(28)
-                        anchors.right: parent.right
-                        anchors.rightMargin: Style.space(8) + Style.space(158) + Style.space(10)
+                        anchors.left: nameCol.right
+                        anchors.leftMargin: listViewRoot.rowColumnGap - listViewRoot.textTrailingCompensation
+                        anchors.right: priceCol.left
+                        anchors.rightMargin: listViewRoot.rowColumnGap
                         anchors.verticalCenter: parent.verticalCenter
                         values: quote && quote.closes ? quote.closes : []
                         lineColor: sparkColor
@@ -280,7 +286,7 @@ Column {
 
                     Column {
                         id: priceCol
-                        width: Style.space(158)
+                        width: listViewRoot.priceColumnWidth
                         anchors.right: parent.right
                         anchors.rightMargin: Style.space(8)
                         anchors.verticalCenter: parent.verticalCenter
