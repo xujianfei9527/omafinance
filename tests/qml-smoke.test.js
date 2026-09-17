@@ -193,6 +193,9 @@ test("watchlist shows a dim 52-week drawdown after the change pill", () => {
   const list = fs.readFileSync(source("FinanceListView.qml"), "utf8")
 
   assert.match(list, /drawdownText:\s*Model\.format52WeekDrawdown\(quote\)/)
+  assert.match(list, /id:\s*priceCol[\s\S]*?width:\s*Style\.space\(158\)/)
+  assert.match(list, /horizontalAlignment:\s*Text\.AlignLeft/)
+  assert.match(list, /Row\s*\{\s*anchors\.left:\s*parent\.left[\s\S]*?id:\s*changePill[\s\S]*?id:\s*drawdownLabel/)
   assert.match(list, /id:\s*changePill[\s\S]*?id:\s*drawdownLabel/)
   assert.match(list, /id:\s*drawdownLabel[\s\S]*?color:\s*controller\.dim/)
 })

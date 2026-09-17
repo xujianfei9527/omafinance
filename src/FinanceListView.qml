@@ -268,7 +268,7 @@ Column {
                         width: Style.space(72)
                         height: Style.space(28)
                         anchors.right: parent.right
-                        anchors.rightMargin: Style.space(8) + Style.space(144) + Style.space(10)
+                        anchors.rightMargin: Style.space(8) + Style.space(158) + Style.space(10)
                         anchors.verticalCenter: parent.verticalCenter
                         values: quote && quote.closes ? quote.closes : []
                         lineColor: sparkColor
@@ -280,7 +280,7 @@ Column {
 
                     Column {
                         id: priceCol
-                        width: Style.space(144)
+                        width: Style.space(158)
                         anchors.right: parent.right
                         anchors.rightMargin: Style.space(8)
                         anchors.verticalCenter: parent.verticalCenter
@@ -289,7 +289,7 @@ Column {
                         Text {
                             textFormat: Text.PlainText
                             width: parent.width
-                            horizontalAlignment: Text.AlignHCenter
+                            horizontalAlignment: Text.AlignLeft
                             elide: Text.ElideRight
                             text: quote ? Model.formatPrice(quote.price, quote.currency, quote.priceHint) : "-"
                             color: controller.contentForeground
@@ -298,7 +298,7 @@ Column {
                         }
 
                         Row {
-                            anchors.right: parent.right
+                            anchors.left: parent.left
                             spacing: Style.space(5)
 
                             Rectangle {

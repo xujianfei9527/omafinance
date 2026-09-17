@@ -79,7 +79,7 @@ BarWidget {
     foreground: root.pillColor
     useActiveColor: false
     tooltipText: ""
-    horizontalMargin: 8.75
+    horizontalMargin: 5
     verticalPadding: 8.75
 
     Text {

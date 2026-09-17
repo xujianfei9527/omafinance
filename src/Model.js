@@ -621,12 +621,17 @@ function barLabel(pinned, quote, vertical, showTicker, showPrice, showChange, st
     ? quote.change !== null && quote.change !== undefined
     : quote.changePercent !== null && quote.changePercent !== undefined)
   var price = hasPrice ? formatPrice(quote.price, quote.currency, quote.priceHint) : ""
+  if (String(quote && quote.currency || "").toUpperCase() === "CNY")
+    price = price.replace(/ CNY$/, "")
   var change = hasChange ? formatQuoteChange(quote, style) : ""
   var drawdown = showChange !== false ? format52WeekDrawdown(quote) : ""
   if (showPrice !== false && price && price !== "-") parts.push(price)
   if (showChange !== false && change && change !== "-") parts.push(change)
   if (drawdown) parts.push(drawdown)
-  return parts.length ? parts.join(vertical ? "\n" : "  ") : "$"
+  if (!vertical && change && change !== "-" && drawdown && parts.length >= 2 && parts[parts.length - 1] === drawdown) {
+    parts[parts.length - 2] += parts.pop()
+  }
+  return parts.length ? parts.join(vertical ? "\n" : "  ") : "$"
 }
 
 function barLabelTone(quote, showTicker, showPrice, showChange, style) {

@@ -223,12 +223,12 @@ test("ETF quotes skip company fundamentals even when Yahoo labels them as equity
 
 test("bar fields can be shown independently", () => {
   const quote = { price: 241.6, currency: "USD", priceHint: 2, change: 2.94, changePercent: 1.234 }
-  assert.equal(Model.barLabel("AAPL", quote, false, true, true, true), "AAPL  $241.60  +1.23%")
-  assert.equal(Model.barLabel("AAPL", quote, false, false, true, true), "$241.60  +1.23%")
-  assert.equal(Model.barLabel("AAPL", quote, false, true, false, true), "AAPL  +1.23%")
-  assert.equal(Model.barLabel("AAPL", quote, false, true, true, false), "AAPL  $241.60")
+  assert.equal(Model.barLabel("AAPL", quote, false, true, true, true), "AAPL  $241.60  +1.23%")
+  assert.equal(Model.barLabel("AAPL", quote, false, false, true, true), "$241.60  +1.23%")
+  assert.equal(Model.barLabel("AAPL", quote, false, true, false, true), "AAPL  +1.23%")
+  assert.equal(Model.barLabel("AAPL", quote, false, true, true, false), "AAPL  $241.60")
   assert.equal(Model.barLabel("AAPL", quote, false, false, false, false), "$")
-  assert.equal(Model.barLabel("AAPL", quote, false, true, true, true, "dollars"), "AAPL  $241.60  +$2.94")
+  assert.equal(Model.barLabel("AAPL", quote, false, true, true, true, "dollars"), "AAPL  $241.60  +$2.94")
   assert.equal(Model.barLabelTone(quote, true, false, false), "up")
   assert.equal(Model.barLabelTone(quote, false, true, false), "up")
   assert.equal(Model.barLabelTone(quote, false, false, true), "up")
@@ -247,10 +247,23 @@ test("bar appends 52-week drawdown using the existing label tone", () => {
     changePercent: -1.1
   }
 
-  assert.equal(Model.barLabel("TEST", quote, false, true, true, true), "TEST  $90.00  -1.10%  (-10.00%)")
+  assert.equal(Model.barLabel("TEST", quote, false, true, true, true), "TEST  $90.00  -1.10%(-10.00%)")
   assert.equal(Model.barLabel("TEST", quote, true, true, true, true), "TEST\n$90.00\n-1.10%\n(-10.00%)")
-  assert.equal(Model.barLabel("TEST", quote, false, true, true, false), "TEST  $90.00")
+  assert.equal(Model.barLabel("TEST", quote, false, true, true, false), "TEST  $90.00")
   assert.equal(Model.barLabelTone(quote, true, true, true), "down")
+})
+
+test("bar omits the CNY currency suffix", () => {
+  const quote = {
+    price: 2.007,
+    fiftyTwoWeekHigh: 2.066,
+    currency: "CNY",
+    priceHint: 4,
+    change: -0.011,
+    changePercent: -0.55
+  }
+
+  assert.equal(Model.barLabel("513650.SS", quote, false, true, true, true), "513650.SS  2.0070  -0.55%(-2.86%)")
 })
 
 test("detail quote refresh targets only the active symbol", () => {
